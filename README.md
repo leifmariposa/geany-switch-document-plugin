@@ -1,0 +1,1 @@
+# geany-switch-document-plugin
