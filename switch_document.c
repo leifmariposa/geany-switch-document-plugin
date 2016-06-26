@@ -159,18 +159,18 @@ static int callback_update_visibilty_elements(G_GNUC_UNUSED GtkWidget *widget, s
 static gboolean row_visible(GtkTreeModel *model, GtkTreeIter *iter, gpointer data)
 {
 	struct PLUGIN_DATA *plugin_data = data;
-	gchar *str;
+	gchar *short_name;
 	gboolean visible = FALSE;
 
 	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
 
-	gtk_tree_model_get(model, iter, COL_SHORT_NAME, &str, -1);
+	gtk_tree_model_get(model, iter, COL_SHORT_NAME, &short_name, -1);
 	const gchar *text_value = plugin_data->text_value;
 
-	if (!text_value || g_strcmp0(text_value, "") == 0 || (str && g_str_match_string(text_value, str, TRUE)))
+	if (!text_value || g_strcmp0(text_value, "") == 0 || (short_name && g_str_match_string(text_value, short_name, TRUE)))
 		visible = TRUE;
 
-	g_free(str);
+	g_free(short_name);
 
 	return visible;
 }
@@ -184,27 +184,25 @@ void activate_selected_file_and_quit(struct PLUGIN_DATA *plugin_data)
 	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
 
 	gtk_tree_view_get_cursor(GTK_TREE_VIEW(plugin_data->tree_view), &path, NULL);
-	if (path)
+	if(path)
 	{
 		GtkTreeIter iter;
 		GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(plugin_data->tree_view));
-		if (gtk_tree_model_get_iter(model, &iter, path))
+		if(gtk_tree_model_get_iter(model, &iter, path))
 		{
 			gchar *real_path = NULL;
-			gtk_tree_model_get(model, &iter,
-				COL_REAL_PATH, &real_path,
-				-1);
-
-			if (real_path != NULL)
+			gtk_tree_model_get(model, &iter, COL_REAL_PATH, &real_path, -1);
+			if(real_path != NULL)
 			{
-				GeanyDocument * doc = document_find_by_real_path(real_path);
-				if (doc && doc->is_valid)
+				GeanyDocument *doc = document_find_by_real_path(real_path);
+				if(doc && doc->is_valid)
 				{
 					gtk_notebook_set_current_page(GTK_NOTEBOOK(geany_plugin->geany_data->main_widgets->notebook), document_get_notebook_page(doc));
 					gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
 					gtk_widget_destroy(plugin_data->main_window);
 					g_free(plugin_data);
 				}
+				g_free(real_path);
 			}
 		}
 		gtk_tree_path_free(path);
