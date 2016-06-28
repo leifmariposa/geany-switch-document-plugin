@@ -29,9 +29,9 @@
 /**********************************************************************/
 static const char *PLUGIN_NAME = "Switch Document";
 static const char *PLUGIN_DESCRIPTION = "Dialog with quick search to quickly switch document";
-static const char *PLUGIN_VERSION = "0.1";
+static const char *PLUGIN_VERSION = "0.2";
 static const char *PLUGIN_AUTHOR = "Leif Persson <leifmariposa@hotmail.com>";
-static const int   WINDOW_WIDTH = 600;
+static const int   WINDOW_WIDTH = 680;
 static const int   WINDOW_HEIGHT = 500;
 
 
@@ -68,6 +68,9 @@ struct PLUGIN_DATA
 	GtkTreeModel        *filter;
 	GtkTreeModel        *sorted;
 	const gchar         *text_value;
+	GtkWidget           *cancel_button;
+	GtkWidget           *close_document_button;
+	GtkWidget           *activate_document_button;
 } PLUGIN_DATA;
 
 
@@ -211,6 +214,54 @@ void activate_selected_file_and_quit(struct PLUGIN_DATA *plugin_data)
 
 
 /**********************************************************************/
+void close_selected_document(struct PLUGIN_DATA *plugin_data)
+{
+	GtkTreePath *path = NULL;
+
+	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
+
+	gtk_tree_view_get_cursor(GTK_TREE_VIEW(plugin_data->tree_view), &path, NULL);
+	if(path)
+	{
+		GtkTreeIter iter;
+		GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(plugin_data->tree_view));
+		if(gtk_tree_model_get_iter(model, &iter, path))
+		{
+			gchar *real_path = NULL;
+			gtk_tree_model_get(model, &iter, COL_REAL_PATH, &real_path, -1);
+			if(real_path != NULL)
+			{
+				GeanyDocument *doc = document_find_by_real_path(real_path);
+				if(doc && doc->is_valid)
+				{
+					document_close(doc);
+				}
+				g_free(real_path);
+
+				/* We have the sorted iter and model */
+				/* Get filter iter and model */
+				GtkTreeIter filter_iter;
+				gtk_tree_model_sort_convert_iter_to_child_iter(GTK_TREE_MODEL_SORT(model), &filter_iter, &iter);
+				GtkTreeModel *filter_model = gtk_tree_model_sort_get_model(GTK_TREE_MODEL_SORT(model));
+
+				/* Get iter and model */
+				GtkTreeIter child_iter;
+				gtk_tree_model_filter_convert_iter_to_child_iter(GTK_TREE_MODEL_FILTER(filter_model), &child_iter, &filter_iter);
+				GtkTreeModel *data_model = gtk_tree_model_filter_get_model (GTK_TREE_MODEL_FILTER(filter_model));
+
+				/* Remove row */
+				gtk_list_store_remove(GTK_LIST_STORE(data_model), &child_iter);
+
+				/* Select the same row as before the deletion */
+				gtk_tree_view_set_cursor(GTK_TREE_VIEW(plugin_data->tree_view), path, NULL, FALSE);
+			}
+		}
+		gtk_tree_path_free(path);
+	}
+}
+
+
+/**********************************************************************/
 void view_on_row_activated(G_GNUC_UNUSED GtkTreeView *treeview,
 						   G_GNUC_UNUSED GtkTreePath *path,
 						   G_GNUC_UNUSED GtkTreeViewColumn *col,
@@ -225,6 +276,9 @@ void view_on_row_activated(G_GNUC_UNUSED GtkTreeView *treeview,
 /**********************************************************************/
 static void create_tree_view(struct PLUGIN_DATA *plugin_data)
 {
+	GtkTreeViewColumn *filename_column;
+	GtkTreeViewColumn *path_column;
+
 	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
 
 	plugin_data->model = get_files();
@@ -235,15 +289,33 @@ static void create_tree_view(struct PLUGIN_DATA *plugin_data)
 	plugin_data->sorted = gtk_tree_model_sort_new_with_model(plugin_data->filter);
 
 	plugin_data->tree_view = gtk_tree_view_new_with_model(plugin_data->sorted);
-	gtk_tree_view_set_headers_visible(GTK_TREE_VIEW(plugin_data->tree_view ),FALSE);
 	g_signal_connect(plugin_data->tree_view, "row-activated", (GCallback) view_on_row_activated, plugin_data);
 
 	GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(plugin_data->tree_view ), -1, "file_name", renderer, "text", COL_SHORT_NAME, NULL);
+	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(plugin_data->tree_view ), -1, "File name", renderer, "text", COL_SHORT_NAME, NULL);
+	filename_column = gtk_tree_view_get_column(GTK_TREE_VIEW(plugin_data->tree_view ), COL_SHORT_NAME);
+	gtk_tree_view_column_set_sort_column_id(filename_column, COL_SHORT_NAME);
+	gtk_tree_view_column_set_max_width(filename_column, WINDOW_WIDTH * 2 / 3);
 
 	renderer = gtk_cell_renderer_text_new();
 	g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
-	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(plugin_data->tree_view ), -1, "base_path", renderer, "text", COL_BASE_PATH, NULL);
+	gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(plugin_data->tree_view ), -1, "Path", renderer, "text", COL_BASE_PATH, NULL);
+	path_column = gtk_tree_view_get_column(GTK_TREE_VIEW(plugin_data->tree_view ), COL_BASE_PATH);
+	gtk_tree_view_column_set_sort_column_id(path_column, COL_BASE_PATH);
+	gtk_tree_view_column_set_max_width(path_column, WINDOW_WIDTH * 2 / 3);
+
+	/* Trigger a sort */
+	gtk_tree_view_column_clicked(filename_column);
+}
+
+
+/**********************************************************************/
+static void close_plugin(struct PLUGIN_DATA *plugin_data)
+{
+	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
+
+	gtk_widget_destroy(plugin_data->main_window);
+	g_free(plugin_data);
 }
 
 
@@ -261,8 +333,7 @@ static gboolean callback_key_press(G_GNUC_UNUSED GtkWidget *widget,
 		activate_selected_file_and_quit(plugin_data);
 		break;
 	case 65307: /* Escape */
-		gtk_widget_destroy(plugin_data->main_window);
-		g_free(plugin_data);
+		close_plugin(plugin_data);
 		break;
 	case 0xff54: /* GDK_Down */
 		gtk_widget_grab_focus(plugin_data->tree_view);
@@ -272,6 +343,27 @@ static gboolean callback_key_press(G_GNUC_UNUSED GtkWidget *widget,
 	}
 
 	return FALSE;
+}
+
+
+/**********************************************************************/
+static void callback_close_document_button(GtkButton *button, struct PLUGIN_DATA *plugin_data)
+{
+	close_selected_document(plugin_data);
+}
+
+
+/**********************************************************************/
+static void callback_cancel_button(GtkButton *button, struct PLUGIN_DATA *plugin_data)
+{
+	close_plugin(plugin_data);
+}
+
+
+/**********************************************************************/
+static void callback_activate_button(GtkButton *button, struct PLUGIN_DATA *plugin_data)
+{
+	activate_selected_file_and_quit(plugin_data);
 }
 
 
@@ -300,7 +392,7 @@ int launch_widget(void)
 
 	create_tree_view(plugin_data);
 
-	GtkWidget *main_grid = gtk_table_new(2, 1, FALSE);
+	GtkWidget *main_grid = gtk_table_new(3, 1, FALSE);
 
 	gtk_table_set_row_spacings(GTK_TABLE(main_grid), 8);
 	gtk_table_set_col_spacings(GTK_TABLE(main_grid), 0);
@@ -321,6 +413,29 @@ int launch_widget(void)
 	gtk_window_set_transient_for(GTK_WINDOW(plugin_data->main_window), GTK_WINDOW (geany_plugin->geany_data->main_widgets->window));
 	g_signal_connect(plugin_data->main_window, "delete_event", G_CALLBACK(quit_goto_open_file), plugin_data);
 	g_signal_connect(plugin_data->main_window, "key-press-event", G_CALLBACK(callback_key_press), plugin_data);
+
+	plugin_data->cancel_button = gtk_button_new_with_label("Cancel");
+	plugin_data->close_document_button = gtk_button_new_with_label("Close document");
+	plugin_data->activate_document_button = gtk_button_new_with_label("Activate document");
+
+	/* Buttons */
+	GtkWidget *bbox = gtk_hbutton_box_new();
+	gtk_button_box_set_layout(GTK_BUTTON_BOX(bbox), GTK_BUTTONBOX_END);
+
+	GtkWidget *button = gtk_button_new_with_mnemonic(_("Close _document"));
+	gtk_widget_set_tooltip_text(button, _("Closes the selected document"));
+	gtk_container_add(GTK_CONTAINER(bbox), button);
+	g_signal_connect(button, "clicked", G_CALLBACK(callback_close_document_button), plugin_data);
+
+	button = gtk_button_new_with_mnemonic(_("_Cancel"));
+	gtk_container_add(GTK_CONTAINER(bbox), button);
+	g_signal_connect(button, "clicked", G_CALLBACK(callback_cancel_button), plugin_data);
+
+	button = gtk_button_new_with_mnemonic(_("_Activate"));
+	gtk_container_add(GTK_CONTAINER(bbox), button);
+	g_signal_connect(button, "clicked", G_CALLBACK(callback_activate_button), plugin_data);
+
+	gtk_table_attach(GTK_TABLE(main_grid), bbox, 0, 1, 2, 3, GTK_EXPAND | GTK_FILL, GTK_SHRINK, 0, 0);
 
 	gtk_container_add(GTK_CONTAINER(plugin_data->main_window), main_grid);
 	gtk_widget_show_all(plugin_data->main_window);
