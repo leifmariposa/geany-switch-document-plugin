@@ -68,9 +68,9 @@ struct PLUGIN_DATA
 	GtkTreeModel        *filter;
 	GtkTreeModel        *sorted;
 	const gchar         *text_value;
+	GtkWidget           *close_button;
 	GtkWidget           *cancel_button;
-	GtkWidget           *close_document_button;
-	GtkWidget           *activate_document_button;
+	GtkWidget           *activate_button;
 } PLUGIN_DATA;
 
 
@@ -153,6 +153,9 @@ static int callback_update_visibilty_elements(G_GNUC_UNUSED GtkWidget *widget, s
 	gtk_window_set_title(GTK_WINDOW(plugin_data->main_window), buf);
 
 	select_first_row(plugin_data);
+
+	gtk_widget_set_sensitive(plugin_data->close_button, filtered_rows > 0);
+	gtk_widget_set_sensitive(plugin_data->activate_button, filtered_rows > 0);
 
 	return 0;
 }
@@ -347,21 +350,21 @@ static gboolean callback_key_press(G_GNUC_UNUSED GtkWidget *widget,
 
 
 /**********************************************************************/
-static void callback_close_document_button(GtkButton *button, struct PLUGIN_DATA *plugin_data)
+static void callback_close_document_button(G_GNUC_UNUSED GtkButton *button, struct PLUGIN_DATA *plugin_data)
 {
 	close_selected_document(plugin_data);
 }
 
 
 /**********************************************************************/
-static void callback_cancel_button(GtkButton *button, struct PLUGIN_DATA *plugin_data)
+static void callback_cancel_button(G_GNUC_UNUSED GtkButton *button, struct PLUGIN_DATA *plugin_data)
 {
 	close_plugin(plugin_data);
 }
 
 
 /**********************************************************************/
-static void callback_activate_button(GtkButton *button, struct PLUGIN_DATA *plugin_data)
+static void callback_activate_button(G_GNUC_UNUSED GtkButton *button, struct PLUGIN_DATA *plugin_data)
 {
 	activate_selected_file_and_quit(plugin_data);
 }
@@ -414,26 +417,22 @@ int launch_widget(void)
 	g_signal_connect(plugin_data->main_window, "delete_event", G_CALLBACK(quit_goto_open_file), plugin_data);
 	g_signal_connect(plugin_data->main_window, "key-press-event", G_CALLBACK(callback_key_press), plugin_data);
 
-	plugin_data->cancel_button = gtk_button_new_with_label("Cancel");
-	plugin_data->close_document_button = gtk_button_new_with_label("Close document");
-	plugin_data->activate_document_button = gtk_button_new_with_label("Activate document");
-
 	/* Buttons */
 	GtkWidget *bbox = gtk_hbutton_box_new();
 	gtk_button_box_set_layout(GTK_BUTTON_BOX(bbox), GTK_BUTTONBOX_END);
 
-	GtkWidget *button = gtk_button_new_with_mnemonic(_("Close _document"));
-	gtk_widget_set_tooltip_text(button, _("Closes the selected document"));
-	gtk_container_add(GTK_CONTAINER(bbox), button);
-	g_signal_connect(button, "clicked", G_CALLBACK(callback_close_document_button), plugin_data);
+	plugin_data->close_button = gtk_button_new_with_mnemonic(_("Close _document"));
+	gtk_widget_set_tooltip_text(plugin_data->close_button, _("Closes the selected document"));
+	gtk_container_add(GTK_CONTAINER(bbox), plugin_data->close_button);
+	g_signal_connect(plugin_data->close_button, "clicked", G_CALLBACK(callback_close_document_button), plugin_data);
 
-	button = gtk_button_new_with_mnemonic(_("_Cancel"));
-	gtk_container_add(GTK_CONTAINER(bbox), button);
-	g_signal_connect(button, "clicked", G_CALLBACK(callback_cancel_button), plugin_data);
+	plugin_data->cancel_button = gtk_button_new_with_mnemonic(_("_Cancel"));
+	gtk_container_add(GTK_CONTAINER(bbox), plugin_data->cancel_button);
+	g_signal_connect(plugin_data->cancel_button, "clicked", G_CALLBACK(callback_cancel_button), plugin_data);
 
-	button = gtk_button_new_with_mnemonic(_("_Activate"));
-	gtk_container_add(GTK_CONTAINER(bbox), button);
-	g_signal_connect(button, "clicked", G_CALLBACK(callback_activate_button), plugin_data);
+	plugin_data->activate_button = gtk_button_new_with_mnemonic(_("_Activate"));
+	gtk_container_add(GTK_CONTAINER(bbox), plugin_data->activate_button);
+	g_signal_connect(plugin_data->activate_button, "clicked", G_CALLBACK(callback_activate_button), plugin_data);
 
 	gtk_table_attach(GTK_TABLE(main_grid), bbox, 0, 1, 2, 3, GTK_EXPAND | GTK_FILL, GTK_SHRINK, 0, 0);
 
