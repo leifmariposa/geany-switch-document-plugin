@@ -353,6 +353,7 @@ static gboolean callback_key_press(G_GNUC_UNUSED GtkWidget *widget,
 static void callback_close_document_button(G_GNUC_UNUSED GtkButton *button, struct PLUGIN_DATA *plugin_data)
 {
 	close_selected_document(plugin_data);
+	callback_update_visibilty_elements(NULL, plugin_data);
 }
 
 
@@ -440,6 +441,7 @@ int launch_widget(void)
 	gtk_widget_show_all(plugin_data->main_window);
 
 	select_first_row(plugin_data);
+	callback_update_visibilty_elements(NULL, plugin_data);
 
 	return 0;
 }
