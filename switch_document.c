@@ -53,6 +53,8 @@ enum
 	COL_SHORT_NAME = 0,
 	COL_BASE_PATH,
 	COL_REAL_PATH,
+	COL_DOCUMENT_ID,
+	COL_CHANGED,
 	NUM_COLS
 };
 
@@ -92,7 +94,9 @@ static GtkTreeModel* get_files()
 	GtkListStore *store = gtk_list_store_new(NUM_COLS,
                                            G_TYPE_STRING,
                                            G_TYPE_STRING,
-                                           G_TYPE_STRING);
+                                           G_TYPE_STRING,
+                                           G_TYPE_UINT,
+                                           G_TYPE_BOOLEAN);
 
 	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
 
@@ -101,12 +105,23 @@ static GtkTreeModel* get_files()
 	for (i = 0; i < geany_plugin->geany_data->documents_array->len; ++i)
 	{
 		GeanyDocument *doc = g_ptr_array_index(geany_plugin->geany_data->documents_array, i);
-		if (doc && doc->is_valid && doc->file_name)
+		if (doc && doc->is_valid)
 		{
 			gtk_list_store_append(store, &iter);
-			gtk_list_store_set(store, &iter, COL_SHORT_NAME, g_path_get_basename(doc->file_name), -1);
-			gtk_list_store_set(store, &iter, COL_BASE_PATH, g_path_get_dirname (doc->file_name), -1);
-			gtk_list_store_set(store, &iter, COL_REAL_PATH, g_strdup(doc->real_path), -1);
+			if (doc->file_name)
+			{
+				gtk_list_store_set(store, &iter, COL_SHORT_NAME, g_path_get_basename(doc->file_name), -1);
+				gtk_list_store_set(store, &iter, COL_BASE_PATH, g_path_get_dirname(doc->file_name), -1);
+				gtk_list_store_set(store, &iter, COL_REAL_PATH, g_strdup(doc->real_path), -1);
+			}
+			else
+			{
+				gtk_list_store_set(store, &iter, COL_SHORT_NAME, "untitled", -1);
+				gtk_list_store_set(store, &iter, COL_BASE_PATH, "", -1);
+				gtk_list_store_set(store, &iter, COL_REAL_PATH, "", -1);
+			}
+			gtk_list_store_set(store, &iter, COL_DOCUMENT_ID, doc->id, -1);
+			gtk_list_store_set(store, &iter, COL_CHANGED, doc->changed, -1);
 		}
 	}
 
@@ -196,19 +211,15 @@ void activate_selected_file_and_quit(struct PLUGIN_DATA *plugin_data)
 		GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(plugin_data->tree_view));
 		if(gtk_tree_model_get_iter(model, &iter, path))
 		{
-			gchar *real_path = NULL;
-			gtk_tree_model_get(model, &iter, COL_REAL_PATH, &real_path, -1);
-			if(real_path != NULL)
+			guint id = 0;
+			gtk_tree_model_get(model, &iter, COL_DOCUMENT_ID, &id, -1);
+			GeanyDocument *doc = document_find_by_id(id);
+			if(doc && doc->is_valid)
 			{
-				GeanyDocument *doc = document_find_by_real_path(real_path);
-				if(doc && doc->is_valid)
-				{
-					gtk_notebook_set_current_page(GTK_NOTEBOOK(geany_plugin->geany_data->main_widgets->notebook), document_get_notebook_page(doc));
-					gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
-					gtk_widget_destroy(plugin_data->main_window);
-					g_free(plugin_data);
-				}
-				g_free(real_path);
+				gtk_notebook_set_current_page(GTK_NOTEBOOK(geany_plugin->geany_data->main_widgets->notebook), document_get_notebook_page(doc));
+				gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
+				gtk_widget_destroy(plugin_data->main_window);
+				g_free(plugin_data);
 			}
 		}
 		gtk_tree_path_free(path);
@@ -277,6 +288,56 @@ void view_on_row_activated(G_GNUC_UNUSED GtkTreeView *treeview,
 
 
 /**********************************************************************/
+void render_filename(G_GNUC_UNUSED GtkTreeViewColumn *col,
+				 GtkCellRenderer *renderer,
+				 GtkTreeModel *model,
+				 GtkTreeIter *iter,
+				 G_GNUC_UNUSED gpointer user_data)
+{
+	gchar *short_name;
+	gboolean changed;
+	gtk_tree_model_get(model, iter,
+					   COL_SHORT_NAME, &short_name,
+					   COL_CHANGED, &changed,
+					   -1);
+
+	if (changed)
+		g_object_set(renderer, "foreground", "Red", "foreground-set", TRUE, NULL);
+	else
+		g_object_set(renderer, "foreground-set", FALSE, NULL); /* Normal color */
+
+	g_object_set(renderer, "text", short_name, NULL);
+
+	g_free(short_name);
+}
+
+
+/**********************************************************************/
+void render_path(G_GNUC_UNUSED GtkTreeViewColumn *col,
+				 GtkCellRenderer *renderer,
+				 GtkTreeModel *model,
+				 GtkTreeIter *iter,
+				 G_GNUC_UNUSED gpointer user_data)
+{
+	gchar *path;
+	gboolean changed;
+	gtk_tree_model_get(model, iter,
+					   COL_BASE_PATH, &path,
+					   COL_CHANGED, &changed,
+					   -1);
+
+	if (changed)
+		g_object_set(renderer, "foreground", "Red", "foreground-set", TRUE, NULL);
+	else
+		g_object_set(renderer, "foreground-set", FALSE, NULL); /* Normal color */
+
+	g_object_set(renderer, "text", path, NULL);
+
+	g_free(path);
+}
+
+
+/**********************************************************************/
 static void create_tree_view(struct PLUGIN_DATA *plugin_data)
 {
 	GtkTreeViewColumn *filename_column;
@@ -299,6 +360,7 @@ static void create_tree_view(struct PLUGIN_DATA *plugin_data)
 	filename_column = gtk_tree_view_get_column(GTK_TREE_VIEW(plugin_data->tree_view ), COL_SHORT_NAME);
 	gtk_tree_view_column_set_sort_column_id(filename_column, COL_SHORT_NAME);
 	gtk_tree_view_column_set_max_width(filename_column, WINDOW_WIDTH * 2 / 3);
+	gtk_tree_view_column_set_cell_data_func(filename_column, renderer, render_filename, NULL, NULL);
 
 	renderer = gtk_cell_renderer_text_new();
 	g_object_set(renderer, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
@@ -306,6 +368,7 @@ static void create_tree_view(struct PLUGIN_DATA *plugin_data)
 	path_column = gtk_tree_view_get_column(GTK_TREE_VIEW(plugin_data->tree_view ), COL_BASE_PATH);
 	gtk_tree_view_column_set_sort_column_id(path_column, COL_BASE_PATH);
 	gtk_tree_view_column_set_max_width(path_column, WINDOW_WIDTH * 2 / 3);
+	gtk_tree_view_column_set_cell_data_func(path_column, renderer, render_path, NULL, NULL);
 
 	/* Trigger a sort */
 	gtk_tree_view_column_clicked(filename_column);
