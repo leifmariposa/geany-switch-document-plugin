@@ -151,7 +151,7 @@ void select_first_row(struct PLUGIN_DATA *plugin_data)
 
 
 /**********************************************************************/
-static int callback_update_visibilty_elements(G_GNUC_UNUSED GtkWidget *widget, struct PLUGIN_DATA *plugin_data)
+static void update_gui_elements(G_GNUC_UNUSED GtkWidget *widget, struct PLUGIN_DATA *plugin_data)
 {
 	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
 
@@ -167,10 +167,18 @@ static int callback_update_visibilty_elements(G_GNUC_UNUSED GtkWidget *widget, s
 	g_sprintf(buf, "%s %d/%d", PLUGIN_NAME, filtered_rows, total_rows);
 	gtk_window_set_title(GTK_WINDOW(plugin_data->main_window), buf);
 
-	select_first_row(plugin_data);
-
 	gtk_widget_set_sensitive(plugin_data->close_button, filtered_rows > 0);
 	gtk_widget_set_sensitive(plugin_data->activate_button, filtered_rows > 0);
+}
+
+
+/**********************************************************************/
+static int callback_update_gui(G_GNUC_UNUSED GtkWidget *widget, struct PLUGIN_DATA *plugin_data)
+{
+	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
+
+	update_gui_elements(widget, plugin_data);
+	select_first_row(plugin_data);
 
 	return 0;
 }
@@ -419,8 +427,10 @@ static gboolean callback_key_press(G_GNUC_UNUSED GtkWidget *widget,
 /**********************************************************************/
 static void callback_close_document_button(G_GNUC_UNUSED GtkButton *button, struct PLUGIN_DATA *plugin_data)
 {
+	D(log_debug("%s:%s", __FILE__, __FUNCTION__));
+
 	close_selected_document(plugin_data);
-	callback_update_visibilty_elements(NULL, plugin_data);
+	update_gui_elements(NULL, plugin_data);
 }
 
 
@@ -469,7 +479,7 @@ int launch_widget(void)
 	gtk_table_set_col_spacings(GTK_TABLE(main_grid), 0);
 
 	plugin_data->text_entry = gtk_entry_new();
-	g_signal_connect(plugin_data->text_entry, "changed", G_CALLBACK(callback_update_visibilty_elements), plugin_data);
+	g_signal_connect(plugin_data->text_entry, "changed", G_CALLBACK(callback_update_gui), plugin_data);
 	gtk_table_attach(GTK_TABLE(main_grid), plugin_data->text_entry, 0, 1, 0, 1, GTK_EXPAND | GTK_FILL, GTK_SHRINK, 0, 0);
 
 	GtkWidget *scrolled_file_list_window = gtk_scrolled_window_new(NULL,NULL);
@@ -508,7 +518,7 @@ int launch_widget(void)
 	gtk_widget_show_all(plugin_data->main_window);
 
 	select_first_row(plugin_data);
-	callback_update_visibilty_elements(NULL, plugin_data);
+	update_gui_elements(NULL, plugin_data);
 
 	return 0;
 }
