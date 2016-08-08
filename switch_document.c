@@ -301,12 +301,14 @@ void render_filename(G_GNUC_UNUSED GtkTreeViewColumn *col,
 					   COL_CHANGED, &changed,
 					   -1);
 
-	if (changed)
-		g_object_set(renderer, "foreground", "Red", "foreground-set", TRUE, NULL);
-	else
-		g_object_set(renderer, "foreground-set", FALSE, NULL); /* Normal color */
-
-	g_object_set(renderer, "text", short_name, NULL);
+	if (changed) {
+		gchar *markup = g_markup_printf_escaped("<span foreground='red'>%s</span>", short_name);
+		g_object_set(renderer, "markup", markup, NULL);
+		g_free(markup);
+	} else {
+		g_object_set(renderer, "markup", NULL, NULL);
+		g_object_set(renderer, "text", short_name, NULL);
+	}
 
 	g_free(short_name);
 }
@@ -326,12 +328,14 @@ void render_path(G_GNUC_UNUSED GtkTreeViewColumn *col,
 					   COL_CHANGED, &changed,
 					   -1);
 
-	if (changed)
-		g_object_set(renderer, "foreground", "Red", "foreground-set", TRUE, NULL);
-	else
-		g_object_set(renderer, "foreground-set", FALSE, NULL); /* Normal color */
-
-	g_object_set(renderer, "text", path, NULL);
+	if (changed) {
+		gchar *markup = g_markup_printf_escaped("<span foreground='red'>%s</span>", path);
+		g_object_set(renderer, "markup", markup, NULL);
+		g_free(markup);
+	} else {
+		g_object_set(renderer, "markup", NULL, NULL);
+		g_object_set(renderer, "text", path, NULL);
+	}
 
 	g_free(path);
 }
